@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quasar: A Programming Language Specialized for LLM Code Actions</title>
+<meta name="description" content="Quasar separates the internal code of an LLM code action from its external calls, so new execution semantics (batched approvals, autoparallelization, conformal prediction) are easy to add. COLM 2026.">
+<meta property="og:title" content="Quasar: A Programming Language Specialized for LLM Code Actions">
+<meta property="og:description" content="Separate internal code from external calls; get security, latency and uncertainty quantification for free. COLM 2026.">
+<meta property="og:type" content="article">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #ffffff; --ink: #1c1c1c; --ink-2: #555b66; --rule: #e3e6eb; --panel: #f6f7f9;
+  --internal: #38761d; --internal-bg: #eef6e8; --external: #4a86e8; --external-bg: #e8f0fc;
+  --str: #b45f06; --kw2: #9900ff;
+  --maxw: 60rem; --text-w: 44rem;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #16181c; --ink: #e8e9ec; --ink-2: #a3a9b4; --rule: #2d3139; --panel: #1e2126;
+  --internal: #8fcf6e; --internal-bg: #203519; --external: #86b0f5; --external-bg: #1c2a44; --str: #e0a05a; --kw2: #c58cff;
+}}
+:root[data-theme="dark"] {
+  --bg: #16181c; --ink: #e8e9ec; --ink-2: #a3a9b4; --rule: #2d3139; --panel: #1e2126;
+  --internal: #8fcf6e; --internal-bg: #203519; --external: #86b0f5; --external-bg: #1c2a44; --str: #e0a05a; --kw2: #c58cff;
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+*, *::before, *::after { box-sizing: inherit; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: Montserrat, "Helvetica Neue", Arial, sans-serif; font-weight: 400; font-size: 1.0625rem; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration-color: var(--external); text-underline-offset: 0.15em; }
+a:hover { color: var(--external); }
+:focus-visible { outline: 3px solid var(--external); outline-offset: 3px; border-radius: 3px; }
+img, svg { max-width: 100%; height: auto; }
+code, pre { font-family: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
+.text { max-width: var(--text-w); }
+
+/* ---- hero ---- */
+header { padding: 4.5rem 0 2.5rem; text-align: center; }
+header .venue { color: var(--ink-2); font-size: 0.95rem; margin: 0 0 1.25rem; }
+h1 { font-weight: 700; font-size: clamp(1.9rem, 1.2rem + 3vw, 3.1rem); line-height: 1.12; letter-spacing: -0.015em; margin: 0 auto 1.5rem; max-width: 20ch; }
+h1 .q1 { font-weight: 800; font-variant-caps: small-caps; letter-spacing: 0.02em; }
+.q { font-variant-caps: small-caps; letter-spacing: 0.03em; }
+.authors { font-size: 1.05rem; line-height: 1.8; margin: 0 auto 0.4rem; max-width: 46rem; }
+.authors a { text-decoration: none; }
+.authors a:hover { text-decoration: underline; }
+.authors sup { font-size: 0.68em; color: var(--ink-2); margin-left: 1px; }
+.affil { color: var(--ink-2); font-size: 0.95rem; margin: 0 0 2rem; }
+.affil sup { font-size: 0.75em; }
+.links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
+.links a { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.15rem; border-radius: 999px; background: var(--ink); color: var(--bg); text-decoration: none; font-weight: 500; font-size: 0.95rem; }
+.links a:hover { background: var(--external); color: #fff; }
+.links svg { width: 1.05em; height: 1.05em; fill: currentColor; }
+.links svg.arxiv { width: 1.4em; height: 1.4em; margin: -0.2em -0.1em; }
+
+/* ---- the one idea: two-colour code ---- */
+.idea { margin: 2.5rem auto 0; display: grid; grid-template-columns: 1.1fr 1fr; gap: 2.5rem; align-items: center; text-align: left; }
+.lede { font-size: 1.3rem; line-height: 1.45; font-weight: 300; margin: 2.5rem auto 0; max-width: 40rem; }
+.lede b { font-weight: 600; }
+.idea .lede { font-size: 1.3rem; line-height: 1.45; font-weight: 300; margin: 0; }
+.idea .lede b { font-weight: 600; }
+.int { color: var(--internal); } .ext { color: var(--external); }
+.codecard { background: var(--panel); border-radius: 14px; padding: 1.25rem 1.5rem; overflow-x: auto; text-align: left; }
+.codecard pre { margin: 0; font-size: 1rem; line-height: 1.75; font-weight: 400; }
+.codecard .line { display: block; border-radius: 6px; padding: 0 0.5rem; margin: 0 -0.5rem; }
+.codecard .line.i { background: var(--internal-bg); }
+.codecard .line.e { background: var(--external-bg); }
+.codecard pre.banded { display: inline-block; background: var(--internal-bg); border-radius: 8px; padding: 0.4rem 0.8rem; }
+.codecard .x { background: var(--external-bg); border-radius: 5px; padding: 0.05em 0.3em; margin: 0 -0.05em; box-shadow: 0 0 0 1px var(--external-bg); }
+.codecard .kw { color: var(--internal); font-weight: 500; }
+.codecard .fn { color: var(--external); font-weight: 500; }
+.codecard .st { color: var(--str); } .codecard .op { color: var(--kw2); }
+.codecard .key { display: flex; gap: 1.25rem; margin-top: 0.9rem; font-size: 0.85rem; color: var(--ink-2); }
+.codecard .key span::before { content: ""; display: inline-block; width: 0.8em; height: 0.8em; border-radius: 3px; margin-right: 0.4em; vertical-align: -0.05em; }
+.codecard .key .ki::before { background: var(--internal-bg); border: 1px solid var(--internal); }
+.codecard .key .ke::before { background: var(--external-bg); border: 1px solid var(--external); }
+@media (max-width: 760px) { .idea { grid-template-columns: 1fr; gap: 1.5rem; } header { padding-top: 3rem; } }
+
+/* ---- sections ---- */
+main section { padding: 3rem 0 0; }
+main section + section { margin-top: 1.5rem; border-top: 1px solid var(--rule); }
+h2 { font-size: 1.55rem; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 1rem; }
+h3 { font-size: 1.1rem; font-weight: 600; margin: 0 0 0.4rem; }
+.fnref { font-size: 0.6em; vertical-align: super; line-height: 0; margin-right: 0.15em; }
+.fnref a { text-decoration: none; color: var(--ink-2); }
+p { margin: 0 0 1rem; }
+.muted { color: var(--ink-2); }
+figure { margin: 1.75rem 0; }
+figcaption { color: var(--ink-2); font-size: 0.9rem; line-height: 1.5; margin-top: 0.7rem; max-width: var(--text-w); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: end; }
+@media (max-width: 640px) { .row2 { grid-template-columns: 1fr; } }
+
+/* three aligned columns: issues (top band) and annotations/semantics (bottom band) share one grid */
+.cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin: 1.5rem 0 0; }
+.col { background: var(--panel); border-radius: 14px; padding: 1.1rem 1.3rem; font-size: 0.95rem; }
+.col h3 { margin-bottom: 0.5rem; }
+.col p { margin: 0 0 0.6rem; }
+.col p:last-child { margin: 0; }
+.col .tag { font-weight: 600; }
+.cols.rows .col { --rg: 1.6rem; display: grid; grid-row: span var(--n, 4); grid-template-rows: subgrid; row-gap: var(--rg); }
+.cols.rows .col h3, .cols.rows .col p { margin: 0; grid-column: 1; }
+/* rule under the heading: padding + negative margin put it midway in the gap, like the rules below */
+.cols.rows .col h3 { grid-row: 1; padding-bottom: calc(0.5 * var(--rg)); border-bottom: 1px solid var(--rule); margin-bottom: calc(-0.5 * var(--rg)); }
+.cols.rows .col p { align-self: center; }
+.cols.rows .col p:nth-of-type(1) { grid-row: 2; }
+.cols.rows .col p:nth-of-type(2) { grid-row: 3; }
+.cols.rows .col p:nth-of-type(3) { grid-row: 4; }
+/* rules midway between paragraphs, whatever their heights */
+.cols.rows .col::before, .cols.rows .col::after { content: ""; grid-column: 1; align-self: start; height: 1px; background: var(--rule); transform: translateY(calc(-0.5 * var(--rg) - 0.5px)); }
+.cols.rows .col::before { grid-row: 3; }
+.cols.rows .col::after { grid-row: 4; }
+/* heading + external block + internal block; blocks bleed to the card edges and fill
+   their cells from rule to rule, the last one to the card bottom */
+.cols.rows.two .col { --n: 3; overflow: hidden; }
+.cols.rows.two .col::before, .cols.rows.two .col::after { content: none; }
+.cols.rows.two .col h3 { border-bottom: 0; }
+.cols.rows.two .blk { display: flex; align-items: center; margin: calc(-0.5 * var(--rg)) -1.3rem; padding: calc(0.5 * var(--rg)) 1.3rem; }
+.cols.rows.two .blk:last-child { margin-bottom: -1.1rem; }
+.cols.rows.two .blk-e { background: var(--external-bg); }
+.cols.rows.two .blk-i { background: var(--internal-bg); }
+.insight { margin: 2.5rem 0 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; }
+@media (max-width: 860px) { .cols, .insight { grid-template-columns: 1fr; } }
+.gqa { color: #3a7ebf; font-weight: 600; } .pair { white-space: nowrap; } .ad { color: #e07b1a; font-weight: 600; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gqa { color: #7fb3e8; } :root:not([data-theme="light"]) .ad { color: #ffa65c; } }
+.pipe { width: 100%; height: auto; margin: 1.5rem 0 0.5rem; font-family: Montserrat, sans-serif; }
+.pipe text { fill: var(--ink); font-size: 15px; }
+.pipe .cap { fill: var(--ink-2); font-size: 13px; }
+.pipe .box { fill: var(--panel); stroke: var(--ink-2); stroke-width: 1.2; }
+.pipe .arr { stroke: var(--ink); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+.pipe .loop { stroke: var(--ink-2); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; marker-end: url(#ah2); }
+
+/* results */
+.result { display: grid; grid-template-columns: 1fr; gap: 1rem; margin: 2.5rem 0; }
+.result > h3, .result > .text p { margin: 0; }
+.result > h3 + .text { margin-top: -0.5rem; }
+.result .fig { display: block; width: 100%; height: auto; }
+.result .plots { display: grid; grid-template-columns: 1.6fr 1.2fr; gap: 1rem; align-items: center; }
+.result .plots.even { grid-template-columns: 1fr 1fr; gap: 2rem; background: linear-gradient(var(--rule), var(--rule)) center / 1px 100% no-repeat; }
+@media (max-width: 760px) { .result, .result .plots, .result .plots.even { grid-template-columns: 1fr; } .result .plots.even { background: none; } }
+
+/* table */
+table { border-collapse: collapse; font-size: 0.95rem; margin: 1.25rem 0 0.5rem; min-width: 26rem; }
+.tablewrap { overflow-x: auto; }
+th, td { padding: 0.45rem 0.9rem; text-align: right; }
+th:first-child, td:first-child { text-align: left; padding-left: 0; }
+thead th { border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); font-weight: 600; }
+th:not(:first-child), td:not(:first-child) { text-align: left; font-variant-numeric: tabular-nums; }
+tbody tr.group td { border-top: 1px solid var(--ink); }
+tbody tr:last-child td { border-bottom: 2px solid var(--ink); }
+
+/* bibtex */
+pre.bib { background: var(--panel); border-radius: 14px; padding: 1.25rem 1.5rem; font-size: 0.9rem; line-height: 1.55; overflow-x: auto; position: relative; }
+.copy { position: absolute; top: 0.8rem; right: 0.8rem; font: inherit; font-family: Montserrat, sans-serif; font-size: 0.8rem; font-weight: 500; padding: 0.3rem 0.7rem; border-radius: 999px; border: 1px solid var(--rule); background: var(--bg); color: var(--ink); cursor: pointer; }
+.copy:hover { border-color: var(--external); color: var(--external); }
+
+footer { margin: 4rem 0 3rem; color: var(--ink-2); font-size: 0.9rem; }
+footer p { margin: 0.3rem 0; }
+@media (prefers-reduced-motion: no-preference) { .links a, .copy { transition: background-color 120ms, color 120ms, border-color 120ms; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <p class="venue">Published as a conference paper at COLM 2026</p>
+  <h1><span class="q1">Quasar</span>: A Programming Language Specialized for LLM Code Actions</h1>
+  <p class="authors">
+    Stephen Mell<sup>1,2</sup>, Botong Zhang<sup>2</sup>, David Mell<sup>3</sup>, Shuo Li<sup>2</sup>, Ramya Ramalingam<sup>2</sup>,
+    Nathan Yu<sup>3</sup>, Stephan Zdancewic<sup>2</sup>, Osbert Bastani<sup>2</sup>
+  </p>
+  <p class="affil"><sup>1</sup>Carnegie Mellon University &nbsp; <sup>2</sup>University of Pennsylvania &nbsp; <sup>3</sup>Independent Researcher</p>
+  <nav class="links" aria-label="Paper resources">
+    <a href="https://arxiv.org/abs/2506.12202"><svg class="arxiv" viewBox="70.94 0 111.12 111.12" aria-hidden="true"><path d="M127.98,55.61l-32.74,38.85c-1.29,1.37-2.08,3.78-1.36,5.5.75,1.8,2.46,2.91,4.4,2.91,1.09,0,1.99-.38,3.16-1.56l40.19-42.71c1.6-1.69,1.62-4.33.04-6.04l-13.68,3.05Z" fill="#aa142d"/><path d="M127.98,55.61l31.19-38.27c1.49-1.99,2.2-3.03,1.49-4.72-.74-1.77-2.59-3.16-4.48-3.16h0c-1.06,0-1.72.09-3.01,1.11l-38.63,41.76c-1.72,1.84-1.71,4.7.02,6.53l47.79,51.07c1.02,1.05,2.05,1.19,3.14,1.19,1.93,0,3.19-1.14,4.03-2.82.72-1.73-.08-3.44-1.4-5.23l-40.12-47.46" fill="#afa497"/><path d="M141.67,52.56L95,2.13S93.29.04,91.48,0s-3.6,1.02-4.34,2.79c-.7,1.69-.2,2.88,1.35,5.1l40.09,48.42" fill="#aa142d"/></svg>Paper</a>
+    <a href="https://openreview.net/forum?id=GsJsZgAoNz"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M4 1h11l6 6v16H4zM6.5 3.5v17h12V9h-5.5V3.5z"/></svg>OpenReview</a>
+    <a href="https://github.com/stephenmell/quasar-colm2026-artifact"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/></svg>Code</a>
+  </nav>
+  <p class="lede">Separating <b class="int">internal code</b> (pure, orchestration) from <b class="ext">external calls</b> (side effects, subagents) enables powerful program analyses for code actions, e.g., improving security, reliability and latency.</p>
+</header>
+
+<main>
+<section id="code-actions">
+  <h2>Code actions</h2>
+  <div class="text">
+  <p>Instead of emitting one tool call per turn, an LLM agent can write a short program that calls tools and subagents from inside loops and conditionals. Many systems take this approach, including CodeAct, Anthropic and OpenAI's Programmatic Tool Calling, Claude Code Ultracode, Recursive Language Models, and DeepMind CaMeL, and it provides accuracy, token efficiency, reproducibility, context management and prompt-injection mitigation, respectively. For example, an agent might use the following code action to summarize a directory of files:</p>
+  </div>
+  <div class="codecard" style="max-width: 36rem;">
+<pre><span class="line">context = <span class="st">""</span></span><span class="line"><span class="kw">for</span> fn <span class="op">in</span> os.<span class="fn">walk</span>(path):</span><span class="line">    data = <span class="fn">read_file</span>(fn)</span><span class="line">    context += <span class="fn">summary_agent</span>(data)</span><span class="line"><span class="kw">return</span> <span class="fn">synthesis_agent</span>(context)</span></pre>
+  </div>
+  <h2 style="margin-top:2.5rem">Python is for software development</h2>
+  <div class="text">
+  <p>Today code actions are written in Python because LLMs are fluent in it. But Python was designed for software development, not for orchestrating tools, and there are various desirable features that Python does not support. Three examples:</p>
+  </div>
+  <div class="cols rows">
+    <div class="col">
+      <h3>Approval fatigue</h3>
+      <p>For security, agents often ask the user to approve each tool call (e.g., <code class="ext">read_file</code>). So many requests cause approval fatigue: users stop reading them and just click yes.</p>
+      <p>Batching these approvals, presenting many of them to a user in a single interaction, could reduce this fatigue.</p>
+      <p>But Python blocks at each call, so approvals can only be requested one at a time.</p>
+    </div>
+    <div class="col">
+      <h3>Subagent mistakes</h3>
+      <p>Subagents return a single answer with no uncertainty quantification, and a wrong intermediate value silently corrupts the result.</p>
+      <p>Conformal prediction has subagents return a set of candidate answers, which is guaranteed to contain the correct answer at a tunable target rate.</p>
+      <p>But Python cannot propagate a set of candidate values through the rest of the program, e.g., through an <code class="int">if</code>.</p>
+    </div>
+    <div class="col">
+      <h3>Slow execution</h3>
+      <p>Each subagent call can take many seconds, and so executing many subagents, particularly in a loop, can be very slow.</p>
+      <p>In many cases, parallelization can be used to run independent calls simultaneously.</p>
+      <p>But Python runs calls strictly in sequence, even when they are independent.</p>
+    </div>
+  </div>
+</section>
+
+<section id="insight">
+  <h2><span class="q">Quasar</span><sup class="fnref"><a href="#fn-name" id="fnref-name" aria-label="Footnote: what the name stands for">1</a></sup> is for code actions</h2>
+  <div class="insight">
+    <div class="text">
+      <p>The key observation is that a code action mixes two kinds of computation. <b class="int">Internal code</b> (loops, string concatenation, return statements, etc.) has no effect on the world. <b class="ext">External calls</b> (reading a file, invoking a subagent) do. Python cannot tell them apart; <span class="q">Quasar</span> keeps them separate.</p>
+      <p>That is enough to make features like these simple to implement: external calls carry an <em>annotation</em> describing their effects, and the interpreter runs internal code under an alternative <em>semantics</em> that tracks those annotations. <span class="q">Quasar</span> programs are executed by confluent rewrite rules, so the interpreter is free to run statements out of order, to resolve a conditional both ways, or to pause and ask&mdash;whatever the feature needs.</p>
+    </div>
+    <div class="codecard">
+<pre class="banded">context = <span class="st">""</span>
+<span class="kw">for</span> fn <span class="op">in</span> <span class="x">os.<span class="fn">walk</span>(path)</span>:
+    data = <span class="x"><span class="fn">read_file</span>(fn)</span>
+    context += <span class="x"><span class="fn">summary_agent</span>(data)</span>
+<span class="kw">return</span> <span class="x"><span class="fn">synthesis_agent</span>(context)</span></pre>
+      <div class="key"><span class="ki">internal code</span><span class="ke">external calls</span></div>
+    </div>
+  </div>
+  <div class="cols rows two">
+    <div class="col">
+      <h3>Approval fatigue</h3>
+      <div class="blk blk-e"><p>External calls declare which resources they touch and whether they require approval.</p></div>
+      <div class="blk blk-i"><p>Internal code runs with batching semantics: execute internally as far as possible, then present every blocked call for approval at once.</p></div>
+    </div>
+    <div class="col">
+      <h3>Subagent mistakes</h3>
+      <div class="blk blk-e"><p>External calls return a conformal prediction set rather than a single value.</p></div>
+      <div class="blk blk-i"><p>Internal code runs with set semantics: an <code class="int">if</code> on <code class="int">{True, False}</code> executes both branches and unions the results.</p></div>
+    </div>
+    <div class="col">
+      <h3>Slow execution</h3>
+      <div class="blk blk-e"><p>External calls declare their commutativity (reorderability with respect to other calls).</p></div>
+      <div class="blk blk-i"><p>Internal code runs with parallel semantics: every call whose arguments are known is dispatched immediately.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="results">
+  <h2><span class="q">Quasar</span> yields diverse benefits</h2>
+  <div class="text">
+  <p>We evaluate on two existing code-action systems with programs generated by GPT-5: ViperGPT on 1000 visual question-answering tasks from <span class="gqa">GQA</span>, and the CaMeL secure assistant on all four suites of <span class="ad">AgentDojo</span>. Each Python program is compared against its own transpiled <span class="q">Quasar</span> counterpart, which makes exactly the same external calls.</p>
+  </div>
+
+  <div class="result">
+    <h3>Approval fatigue: <span class="q">Quasar</span> reduces tail* approval count by <span class="pair"><span class="gqa">2×</span> / <span class="ad">7×</span></span></h3>
+    <div class="text">
+      <p>Though only <span class="pair"><span class="gqa">50%</span> / <span class="ad">57%</span></span> of tasks have anything to batch, across those that do, user interactions fall by <span class="pair"><span class="gqa">53%</span> / <span class="ad">44%</span></span>.</p>
+    </div>
+    <div class="plots">
+      <img class="fig" src="assets/round_improvement_hist.svg" alt="" width="940" height="500" loading="lazy">
+      <img class="fig" src="assets/round_improvement.svg" alt="" width="660" height="500" loading="lazy">
+    </div>
+  </div>
+
+  <div class="result">
+    <h3>Subagent mistakes: <span class="q">Quasar</span> meets the 10% conformal error target</h3>
+    <div class="text">
+      <p>Thresholds are chosen on a validation split to hit a 10% error target; over 100 random splits the test error is <span class="pair"><span class="gqa">7.9%</span> / <span class="ad">8.6%</span></span>. The price of the conformal guarantee is uncertainty: the result set has more than one element on <span class="pair"><span class="gqa">58%</span> / <span class="ad">84%</span></span> of tasks.</p>
+    </div>
+    <div class="plots even">
+      <img class="fig" src="assets/conformal_error.svg" alt="" width="780" height="378" loading="lazy">
+      <img class="fig" src="assets/conformal_uncertain.svg" alt="" width="780" height="379" loading="lazy">
+    </div>
+  </div>
+
+  <div class="result">
+    <h3>Slow execution: <span class="q">Quasar</span> improves tail* latency by <span class="pair"><span class="gqa">4×</span> / <span class="ad">3×</span></span></h3>
+    <div class="text">
+      <p>External calls are recorded and replayed so their latency is controlled. On the <span class="pair"><span class="gqa">49%</span> / <span class="ad">38%</span></span> of tasks that are parallelizable, running time falls by <span class="pair"><span class="gqa">37%</span> / <span class="ad">54%</span></span>.</p>
+    </div>
+    <div class="plots">
+      <img class="fig" src="assets/speedup_hist.svg" alt="" width="940" height="510" loading="lazy">
+      <img class="fig" src="assets/speedup.svg" alt="" width="500" height="500" loading="lazy">
+    </div>
+  </div>
+
+  <div class="text">
+    <p class="muted" style="font-size:0.9rem">*P90: median improvement over the tasks above the 90th percentile of approval count or latency.</p>
+  </div>
+
+  <div class="result">
+    <h3>Scalability: <span class="q">Quasar</span> reduces approvals by 97% and running time by 93% on deep research</h3>
+    <div class="text">
+    <p>The same approach scales to deep research. On a subset of BrowseComp-Plus (~100 documents per question, run through Recursive Language Models with <span class="q">Quasar</span> in place of Python), approvals drop by 97% and running time by 93%, because complex tasks make many more external calls and so leave much more to batch and parallelize.</p>
+    </div>
+  </div>
+</section>
+
+<section id="implementation">
+  <h2><span class="q">Quasar</span> is simple, extensible, and transpiled from Python</h2>
+  <div class="text">
+  <p>Raw <span class="q">Quasar</span> looks nothing like Python, and LLMs cannot write it directly. Instead, the LLM writes Python in a subset (function calls, local variables, <code class="int">if</code> and <code class="int">for</code>) that a transpiler converts into <span class="q">Quasar</span>'s small functional form: imperative updates inside conditionals and loops become functional conditionals and folds. Any Python library is usable as an external call. Transpiler errors are static, so they can be fed back to the model without running anything.</p>
+  </div>
+  <svg class="pipe" viewBox="0 0 900 250" role="img" aria-label="Pipeline: input goes to the LLM, which writes a Python subset; the Quasar transpiler functionalizes it into Quasar code; the Quasar interpreter executes it out of order and produces a result, whose tool output is fed back to the LLM; transpiler errors are also fed back; the LLM emits the output.">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5 0 10z" fill="currentColor"/></marker>
+      <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5 0 10z" fill="currentColor"/></marker>
+    </defs>
+    <g style="color: var(--ink)">
+      <rect class="box" x="10" y="95" width="110" height="50" rx="8"/><text x="65" y="125" text-anchor="middle">LLM</text>
+      <rect class="box" x="170" y="95" width="120" height="50" rx="25"/><text x="230" y="117" text-anchor="middle">Python</text><text x="230" y="135" text-anchor="middle">subset</text>
+      <rect class="box" x="340" y="95" width="120" height="50" rx="8"/><text x="400" y="117" text-anchor="middle"><tspan class="q">Quasar</tspan></text><text x="400" y="135" text-anchor="middle">transpiler</text>
+      <rect class="box" x="510" y="95" width="120" height="50" rx="25"/><text x="570" y="117" text-anchor="middle"><tspan class="q">Quasar</tspan></text><text x="570" y="135" text-anchor="middle">code</text>
+      <rect class="box" x="680" y="95" width="120" height="50" rx="8"/><text x="740" y="117" text-anchor="middle"><tspan class="q">Quasar</tspan></text><text x="740" y="135" text-anchor="middle">interpreter</text>
+      <rect class="box" x="830" y="95" width="60" height="50" rx="25"/><text x="860" y="125" text-anchor="middle">Result</text>
+      <path class="arr" d="M120 120H168"/><path class="arr" d="M290 120H338"/><path class="arr" d="M460 120H508"/><path class="arr" d="M630 120H678"/><path class="arr" d="M800 120H828"/>
+    </g>
+    <g style="color: var(--ink-2)">
+      <path class="loop" d="M860 95V45H78V93"/>
+      <text class="cap" x="470" y="38" text-anchor="middle">tool output</text>
+      <path class="loop" d="M400 95V72H110V93"/>
+      <text class="cap" x="255" y="66" text-anchor="middle">transpiler errors</text>
+      <path class="loop" d="M45 10V93"/><text class="cap" x="52" y="24" text-anchor="start">input</text>
+      <path class="loop" d="M65 145V230"/><text class="cap" x="72" y="222" text-anchor="start">output</text>
+      <text class="cap" x="230" y="175" text-anchor="middle">if, for, calls, locals, ...</text>
+      <text class="cap" x="400" y="175" text-anchor="middle">functionalize</text>
+      <text class="cap" x="570" y="175" text-anchor="middle">simple</text>
+      <text class="cap" x="740" y="175" text-anchor="middle">extensible: out-of-order,</text>
+      <text class="cap" x="740" y="193" text-anchor="middle">batched, set-valued</text>
+    </g>
+  </svg>
+</section>
+
+<section id="generation">
+  <h2><span class="q">Quasar</span> preserves task accuracy</h2>
+  <div class="text">
+  <p>Fraction of tasks (%) whose generated program executes without error, and whose output matches the ground truth, on <span class="gqa">GQA</span> and <span class="ad">AgentDojo</span>. Restricting GPT-5 to the transpilable subset (1-turn) leaves accuracy unchanged; feeding transpiler errors back for up to five turns improves it on both benchmarks. A small model (GPT-4.1-nano) that struggles to stay in the subset can be fine-tuned on 900 programs generated by the large model.</p>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <thead>
+      <tr><th>Approach</th><th>Execution</th><th>Accuracy</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Python, unrestricted</td><td><span class="pair"><span class="gqa">99.6</span> / <span class="ad">76.3</span></span></td><td><span class="pair"><span class="gqa">71.8</span> / <span class="ad">64.5</span></span></td></tr>
+      <tr><td><span class="q">Quasar</span> (1-turn)</td><td><span class="pair"><span class="gqa">97.9</span> / <span class="ad">82.8</span></span></td><td><span class="pair"><span class="gqa">71.4</span> / <span class="ad">63.4</span></span></td></tr>
+      <tr><td><span class="q">Quasar</span> (5-turn)</td><td><span class="pair"><span class="gqa">99.5</span> / <span class="ad">89.2</span></span></td><td><span class="pair"><span class="gqa">72.3</span> / <span class="ad">67.7</span></span></td></tr>
+      <tr class="group"><td>GPT-4.1-nano, base</td><td><span class="gqa">92</span></td><td><span class="gqa">65</span></td></tr>
+      <tr><td>GPT-4.1-nano, fine-tuned</td><td><span class="gqa">99</span></td><td><span class="gqa">71</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="cite">
+  <h2>Citation</h2>
+<pre class="bib" id="bibtex"><button class="copy" type="button" data-copy="#bibtex">Copy</button>@inproceedings{mell2026quasar,
+    title={Quasar: A Programming Language Specialized for {LLM} Code Actions},
+    author={Stephen Mell and Botong Zhang and David Mell and Shuo Li and Ramya Ramalingam and Nathan Yu and Stephan Zdancewic and Osbert Bastani},
+    booktitle={Third Conference on Language Modeling},
+    year={2026},
+    url={https://openreview.net/forum?id=GsJsZgAoNz}
+}</pre>
+</section>
+</main>
+
+<footer>
+  <p>Supported in part by NSF Awards CCF-1917852, CCF-2247088, CCF-2338777 and SLES 2331783, an Amazon Research Award (Fall 2023), and an Amazon/ASSET gift for research in trustworthy AI. As befits an ML paper, this website was aggressively vibe-coded (but also read in full by a human).</p>
+  <p id="fn-name"><sup>1</sup> <span class="q">Quasar</span>: <em>QU</em>ick <em>A</em>nd <em>S</em>ecure <em>A</em>nd <em>R</em>eliable. <a href="#fnref-name" aria-label="Back to text">↩</a></p>
+</footer>
+</div>
+<script>
+document.querySelectorAll('.copy').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var pre = document.querySelector(b.dataset.copy);
+    var text = Array.from(pre.childNodes).filter(function (n) { return n !== b; }).map(function (n) { return n.textContent; }).join('');
+    navigator.clipboard.writeText(text).then(function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); });
+  });
+});
+</script>
+</body>
+</html>
